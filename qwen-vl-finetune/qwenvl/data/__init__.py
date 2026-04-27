@@ -31,6 +31,11 @@ VIDEOPROXY_DESC_SMOKE = {
     "data_path": "",
 }
 
+VIDEOPROXY_DESC_10K = {
+    "annotation_path": "/m2v_intern/xuboshen/zgw/data/VideoProxyMixed/hier_seg_annotation_v1/qwen_sft_data/videoproxy_description_10k.jsonl",
+    "data_path": "",
+}
+
 data_dict = {
     "cambrian_737k": CAMBRIAN_737K,
     "cambrian_737k_pack": CAMBRIAN_737K_PACK,
@@ -38,6 +43,7 @@ data_dict = {
     "clevr_mc": CLEVR_MC,
     "videochatgpt": VIDEOCHATGPT,
     "videoproxy_desc_smoke": VIDEOPROXY_DESC_SMOKE,
+    "videoproxy_desc_10k": VIDEOPROXY_DESC_10K,
 }
 
 
