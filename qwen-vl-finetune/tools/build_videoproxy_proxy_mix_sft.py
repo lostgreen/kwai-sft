@@ -29,6 +29,7 @@ import argparse
 import json
 import random
 import re
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
@@ -261,6 +262,70 @@ def convert_rows(rows: list[dict[str, Any]], source_path: str) -> tuple[list[dic
     return records, stats
 
 
+def update_stats(stats: Counter, record: dict[str, Any] | None) -> None:
+    if record is None:
+        stats["skipped"] += 1
+        return
+    stats["kept"] += 1
+    problem_type = record.get("metadata", {}).get("source_problem_type") or "unknown"
+    stats[f"problem_type:{problem_type}"] += 1
+    if record.get("metadata", {}).get("answer_normalization") == "wrapped_answer_tag":
+        stats["answer_tag_wrapped"] += 1
+
+
+def stream_convert_jsonl(
+    input_path: Path,
+    output_path: Path,
+    max_records: int = 0,
+    progress_interval: int = 1000,
+) -> tuple[int, int, Counter]:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    stats: Counter = Counter()
+    read_rows = 0
+    written = 0
+
+    with input_path.open(encoding="utf-8") as fin, output_path.open("w", encoding="utf-8") as fout:
+        for line_no, line in enumerate(fin, 1):
+            line = line.strip()
+            if not line:
+                continue
+            read_rows += 1
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Failed to parse {input_path}:{line_no}: {exc}") from exc
+
+            record = convert_record(row, source_path=str(input_path), line_no=line_no) if isinstance(row, dict) else None
+            update_stats(stats, record)
+            if record is not None:
+                fout.write(json.dumps(record, ensure_ascii=False) + "\n")
+                written += 1
+                if max_records > 0 and written >= max_records:
+                    break
+
+            if progress_interval > 0 and read_rows % progress_interval == 0:
+                print(
+                    f"[proxy-mix-sft] processed={read_rows} written={written} skipped={stats['skipped']}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+    if progress_interval > 0:
+        print(
+            f"[proxy-mix-sft] processed={read_rows} written={written} skipped={stats['skipped']}",
+            file=sys.stderr,
+            flush=True,
+        )
+    return written, read_rows, stats
+
+
+def selected_stats(records: Iterable[dict[str, Any]], skipped: int = 0) -> Counter:
+    stats: Counter = Counter({"skipped": skipped})
+    for record in records:
+        update_stats(stats, record)
+    return stats
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Convert final VideoProxy mixed Proxy JSONL to Qwen-VL SFT JSONL.",
@@ -271,6 +336,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-records", type=int, default=0, help="Maximum rows to write; 0 means all")
     parser.add_argument("--shuffle", action="store_true", help="Shuffle before applying max-records")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--progress-interval",
+        type=int,
+        default=1000,
+        help="Print streaming conversion progress every N source rows; <=0 disables progress logs.",
+    )
     return parser.parse_args(argv)
 
 
@@ -280,23 +351,32 @@ def main(argv: list[str] | None = None) -> int:
     if not input_jsonl.is_file():
         raise FileNotFoundError(f"input-jsonl not found: {input_jsonl}")
 
-    rows = load_jsonl(input_jsonl)
-    records, stats = convert_rows(rows, source_path=str(input_jsonl))
-
-    if args.shuffle:
-        random.Random(args.seed).shuffle(records)
-    if args.max_records > 0:
-        records = records[: args.max_records]
-
     output_jsonl = Path(args.output_jsonl)
-    written = write_jsonl(records, output_jsonl)
+    if not args.shuffle:
+        written, read_rows, stats = stream_convert_jsonl(
+            input_path=input_jsonl,
+            output_path=output_jsonl,
+            max_records=args.max_records,
+            progress_interval=args.progress_interval,
+        )
+    else:
+        print("[proxy-mix-sft] --shuffle enabled; loading all records before writing.", file=sys.stderr)
+        rows = load_jsonl(input_jsonl)
+        records, stats = convert_rows(rows, source_path=str(input_jsonl))
+        random.Random(args.seed).shuffle(records)
+        if args.max_records > 0:
+            records = records[: args.max_records]
+        written = write_jsonl(records, output_jsonl)
+        read_rows = len(rows)
+        stats = selected_stats(records, skipped=stats["skipped"])
+
     task_counts = {
         key.removeprefix("problem_type:"): value
         for key, value in sorted(stats.items())
         if key.startswith("problem_type:")
     }
     task_summary = ", ".join(f"{key}={value}" for key, value in task_counts.items())
-    print(f"Wrote {written} records from {len(rows)} rows to {output_jsonl}")
+    print(f"Wrote {written} records from {read_rows} processed rows to {output_jsonl}")
     print(f"kept={stats['kept']} skipped={stats['skipped']} answer_tag_wrapped={stats['answer_tag_wrapped']}")
     if task_summary:
         print(f"Problem types: {task_summary}")
