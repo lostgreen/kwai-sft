@@ -36,6 +36,16 @@ VIDEOPROXY_DESC_10K = {
     "data_path": "",
 }
 
+VIDEOPROXY_DVC_10K = {
+    "annotation_path": "/m2v_intern/xuboshen/zgw/data/VideoProxyMixed/hier_seg_annotation_v1/qwen_sft_data/videoproxy_dense_video_caption_10k.jsonl",
+    "data_path": "",
+}
+
+VIDEOPROXY_PROXY_MIX_SFT = {
+    "annotation_path": "/m2v_intern/xuboshen/zgw/data/VideoProxyMixed/multi_task/experiments/composition_base_seg_logic_aot_hier10k_el10k_aot10k_mf256_ema/qwen_sft/proxy_mix_train_sft.jsonl",
+    "data_path": "",
+}
+
 data_dict = {
     "cambrian_737k": CAMBRIAN_737K,
     "cambrian_737k_pack": CAMBRIAN_737K_PACK,
@@ -44,6 +54,8 @@ data_dict = {
     "videochatgpt": VIDEOCHATGPT,
     "videoproxy_desc_smoke": VIDEOPROXY_DESC_SMOKE,
     "videoproxy_desc_10k": VIDEOPROXY_DESC_10K,
+    "videoproxy_dvc_10k": VIDEOPROXY_DVC_10K,
+    "videoproxy_proxy_mix_sft": VIDEOPROXY_PROXY_MIX_SFT,
 }
 
 

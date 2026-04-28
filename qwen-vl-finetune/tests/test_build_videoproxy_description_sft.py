@@ -118,6 +118,77 @@ class BuildVideoProxyDescriptionSftTest(unittest.TestCase):
         self.assertEqual(record["metadata"]["segment_start_sec"], 10)
         self.assertEqual(record["metadata"]["segment_end_sec"], 18)
 
+    def test_builds_dense_video_caption_record_from_l2_timestamps_and_short_events(self):
+        builder = load_builder_module()
+        annotation = {
+            "clip_key": "clip_0003",
+            "source_video_path": "/data/videos/clip_0003.mp4",
+            "clip_duration_sec": 75,
+            "domain_l1": "culinary_food",
+            "domain_l2": "fine_grained_prep",
+            "topology_type": "procedural",
+            "level2": {
+                "events": [
+                    {
+                        "event_id": 2,
+                        "start_time": 15,
+                        "end_time": 25,
+                        "instruction": "",
+                        "dense_caption": (
+                            "A person stirs the ingredients together in a bowl. "
+                            "The mixture becomes more uniform as the utensil moves around."
+                        ),
+                    },
+                    {
+                        "event_id": 1,
+                        "start_time": 5,
+                        "end_time": 12,
+                        "instruction": "A person places chopped vegetables into a bowl",
+                        "dense_caption": "The vegetables are moved from the cutting board into the bowl.",
+                    },
+                    {
+                        "event_id": 3,
+                        "start_time": 30,
+                        "end_time": None,
+                        "instruction": "Invalid timestamp should be skipped",
+                    },
+                ]
+            },
+        }
+        config = builder.BuildConfig(tasks=("dense_video_caption",), max_frames=256)
+
+        records = builder.build_records_for_annotation(annotation, config)
+
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record["video"], "/data/videos/clip_0003.mp4")
+        self.assertIn(
+            "Write a dense video caption as a chronological list of timestamped mid-level visual events.",
+            record["conversations"][0]["value"],
+        )
+        self.assertIn(
+            "Use visible scene or shot boundaries as anchors, then decide whether to keep, merge, or split them",
+            record["conversations"][0]["value"],
+        )
+        self.assertIn("Merge adjacent shots only when they show the same unbroken event", record["conversations"][0]["value"])
+        self.assertIn("Split a long continuous shot when it contains multiple distinct activities", record["conversations"][0]["value"])
+        self.assertNotIn("hierarchy annotation pipeline", record["conversations"][0]["value"])
+        self.assertIn("[start_second-end_second]", record["conversations"][0]["value"])
+        self.assertIn("8-20 words", record["conversations"][0]["value"])
+        self.assertEqual(
+            record["conversations"][1]["value"],
+            "\n".join(
+                [
+                    "[5-12] A person places chopped vegetables into a bowl",
+                    "[15-25] A person stirs the ingredients together in a bowl.",
+                ]
+            ),
+        )
+        self.assertEqual(record["metadata"]["task"], "dense_video_caption")
+        self.assertEqual(record["metadata"]["num_events"], 2)
+        self.assertEqual(record["metadata"]["timestamp_format"], "seconds")
+        self.assertEqual(record["metadata"]["event_text_source"], "instruction_fallback_dense_caption")
+
     def test_cli_writes_jsonl_and_honors_max_videos(self):
         builder = load_builder_module()
         with tempfile.TemporaryDirectory() as tmp_dir:

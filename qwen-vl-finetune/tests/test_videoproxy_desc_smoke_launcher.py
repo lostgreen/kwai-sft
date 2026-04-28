@@ -8,6 +8,8 @@ FINETUNE_ROOT = Path(__file__).resolve().parents[1]
 DATA_INIT = FINETUNE_ROOT / "qwenvl" / "data" / "__init__.py"
 SCRIPT_PATH = FINETUNE_ROOT / "scripts" / "run_videoproxy_desc_smoke_lora_2gpu.sh"
 FORMAL_SCRIPT_PATH = FINETUNE_ROOT / "scripts" / "run_videoproxy_desc_10k_lora_1gpu.sh"
+DVC_SCRIPT_PATH = FINETUNE_ROOT / "scripts" / "run_videoproxy_dvc_10k_lora_1gpu.sh"
+PROXY_MIX_SCRIPT_PATH = FINETUNE_ROOT / "scripts" / "run_videoproxy_proxy_mix_sft_lora_1gpu.sh"
 
 
 def load_data_module():
@@ -43,6 +45,30 @@ class VideoProxyDescSmokeLauncherTest(unittest.TestCase):
         self.assertEqual(config["data_path"], "")
         self.assertEqual(config["sampling_rate"], 1.0)
 
+    def test_dense_video_caption_dataset_is_registered_with_absolute_jsonl_and_empty_data_path(self):
+        data_module = load_data_module()
+
+        config = data_module.data_list(["videoproxy_dvc_10k"])[0]
+
+        self.assertEqual(
+            config["annotation_path"],
+            "/m2v_intern/xuboshen/zgw/data/VideoProxyMixed/hier_seg_annotation_v1/qwen_sft_data/videoproxy_dense_video_caption_10k.jsonl",
+        )
+        self.assertEqual(config["data_path"], "")
+        self.assertEqual(config["sampling_rate"], 1.0)
+
+    def test_proxy_mix_sft_dataset_is_registered_with_absolute_jsonl_and_empty_data_path(self):
+        data_module = load_data_module()
+
+        config = data_module.data_list(["videoproxy_proxy_mix_sft"])[0]
+
+        self.assertEqual(
+            config["annotation_path"],
+            "/m2v_intern/xuboshen/zgw/data/VideoProxyMixed/multi_task/experiments/composition_base_seg_logic_aot_hier10k_el10k_aot10k_mf256_ema/qwen_sft/proxy_mix_train_sft.jsonl",
+        )
+        self.assertEqual(config["data_path"], "")
+        self.assertEqual(config["sampling_rate"], 1.0)
+
     def test_two_gpu_smoke_launcher_uses_registered_dataset_and_local_4b_model(self):
         text = SCRIPT_PATH.read_text(encoding="utf-8")
 
@@ -65,6 +91,26 @@ class VideoProxyDescSmokeLauncherTest(unittest.TestCase):
         self.assertIn("--report_to tensorboard", text)
         self.assertIn("--logging_dir \"${TENSORBOARD_DIR}\"", text)
         self.assertIn("EFFECTIVE_BATCH=$((NPROC_PER_NODE * BATCH_SIZE * GRAD_ACCUM_STEPS))", text)
+
+    def test_dense_video_caption_launcher_uses_registered_dataset_and_longer_context(self):
+        text = DVC_SCRIPT_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("videoproxy_dvc_10k", text)
+        self.assertIn("MODEL_MAX_LENGTH=\"${MODEL_MAX_LENGTH:-16384}\"", text)
+        self.assertIn("BATCH_SIZE=\"${BATCH_SIZE:-2}\"", text)
+        self.assertIn("GRAD_ACCUM_STEPS=\"${GRAD_ACCUM_STEPS:-16}\"", text)
+        self.assertIn("--video_max_frames \"${VIDEO_MAX_FRAMES}\"", text)
+        self.assertIn("--report_to tensorboard", text)
+
+    def test_proxy_mix_sft_launcher_uses_registered_dataset_and_large_context(self):
+        text = PROXY_MIX_SCRIPT_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("videoproxy_proxy_mix_sft", text)
+        self.assertIn("MODEL_MAX_LENGTH=\"${MODEL_MAX_LENGTH:-16384}\"", text)
+        self.assertIn("BATCH_SIZE=\"${BATCH_SIZE:-1}\"", text)
+        self.assertIn("GRAD_ACCUM_STEPS=\"${GRAD_ACCUM_STEPS:-32}\"", text)
+        self.assertIn("--video_max_frames \"${VIDEO_MAX_FRAMES}\"", text)
+        self.assertIn("--report_to tensorboard", text)
 
 
 if __name__ == "__main__":

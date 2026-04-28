@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-SUPPORTED_TASKS = {"video_description", "dense_caption"}
+SUPPORTED_TASKS = {"video_description", "dense_caption", "dense_video_caption"}
 
 VISIBLE_GROUNDING_RULES = (
     "Every statement must be grounded in what is visible in the frames.\n"
@@ -51,6 +51,28 @@ DENSE_CAPTION_PROMPT = (
     "Write a dense visual caption for this continuous video event (2-4 sentences).\n"
     "Describe visible actions, objects, spatial relations, and visible state "
     "changes in chronological order.\n"
+    f"{VISIBLE_GROUNDING_RULES}"
+)
+
+DENSE_VIDEO_CAPTION_PROMPT = (
+    "<video>\n"
+    "Write a dense video caption as a chronological list of timestamped mid-level visual events.\n"
+    "Use visible scene or shot boundaries as anchors, then decide whether to keep, "
+    "merge, or split them into events.\n"
+    "Merge adjacent shots only when they show the same unbroken event in the same "
+    "continuous space/time, such as a framing change, shot/reverse-shot, or continuous "
+    "camera movement.\n"
+    "Keep events separate when the location/time, main subject, activity step, object "
+    "interaction, or resulting state clearly changes; keep title cards, intros/outros, "
+    "static text, and cut-away/B-roll as separate visible events if present.\n"
+    "Split a long continuous shot when it contains multiple distinct activities or "
+    "sub-tasks; avoid sub-events shorter than about 5 seconds unless there is a clear "
+    "scene/activity change.\n"
+    "Use one line per event in the format [start_second-end_second] with plain "
+    "integer seconds, followed by 8-20 words describing "
+    "WHAT happens, WITH WHICH visible objects, and the visible outcome or state change.\n"
+    "Keep each event concise, objective, and grounded in visible evidence.\n"
+    "Do not add events, speech content, or intent that cannot be seen.\n"
     f"{VISIBLE_GROUNDING_RULES}"
 )
 
@@ -110,6 +132,11 @@ def numeric_or_none(value: Any) -> float | None:
         return None
 
 
+def format_seconds(value: float) -> str:
+    total_seconds = max(0, int(round(value)))
+    return str(total_seconds)
+
+
 def path_time(value: Any) -> str:
     parsed = numeric_or_none(value)
     if parsed is None:
@@ -124,6 +151,35 @@ def l2_event_clip_path(clip_dir: str, clip_key: str, event: dict[str, Any]) -> s
     start = path_time(event.get("start_time"))
     end = path_time(event.get("end_time"))
     return str(Path(clip_dir) / "L2" / f"{clip_key}_L2_ev{event_id}_{start}_{end}.mp4")
+
+
+def iter_l2_events(annotation: dict[str, Any]) -> list[dict[str, Any]]:
+    events = annotation.get("level2", {}).get("events", [])
+    if not isinstance(events, list):
+        return []
+    return [event for event in events if isinstance(event, dict)]
+
+
+def first_sentence(text: str) -> str:
+    text = clean_text(text)
+    if not text:
+        return ""
+    for idx, char in enumerate(text):
+        if char in ".!?":
+            return text[: idx + 1].strip()
+    return text
+
+
+def event_short_description(event: dict[str, Any]) -> tuple[str, str]:
+    instruction = clean_text(event.get("instruction"))
+    if instruction:
+        return instruction, "instruction"
+
+    dense_caption = first_sentence(event.get("dense_caption"))
+    if dense_caption:
+        return dense_caption, "dense_caption"
+
+    return "", ""
 
 
 def base_metadata(
@@ -204,9 +260,7 @@ def build_dense_caption_records(
 ) -> list[dict[str, Any]]:
     clip_key = clean_text(annotation.get("clip_key"))
     source_video = get_source_video_path(annotation)
-    events = annotation.get("level2", {}).get("events", [])
-    if not isinstance(events, list):
-        return []
+    events = iter_l2_events(annotation)
 
     records: list[dict[str, Any]] = []
     for event in sorted(events, key=lambda item: numeric_or_none(item.get("start_time")) or 0.0):
@@ -251,6 +305,70 @@ def build_dense_caption_records(
     return records
 
 
+def build_dense_video_caption_record(
+    annotation: dict[str, Any],
+    config: BuildConfig,
+) -> dict[str, Any] | None:
+    video_path = get_source_video_path(annotation)
+    if not video_path or not video_exists_if_required(video_path, config):
+        return None
+
+    duration = numeric_or_none(annotation.get("clip_duration_sec"))
+    lines: list[str] = []
+    event_ids: list[Any] = []
+    text_sources: set[str] = set()
+
+    for event in sorted(iter_l2_events(annotation), key=lambda item: numeric_or_none(item.get("start_time")) or 0.0):
+        start = numeric_or_none(event.get("start_time"))
+        end = numeric_or_none(event.get("end_time"))
+        if start is None or end is None:
+            continue
+        if duration is not None:
+            start = max(0.0, min(start, duration))
+            end = max(0.0, min(end, duration))
+        if start >= end:
+            continue
+
+        description, source = event_short_description(event)
+        if not description:
+            continue
+
+        lines.append(
+            f"[{format_seconds(start)}-{format_seconds(end)}] {description}"
+        )
+        event_ids.append(event.get("event_id") or event.get("id"))
+        text_sources.add(source)
+
+    if not lines:
+        return None
+
+    if text_sources == {"instruction"}:
+        event_text_source = "instruction"
+    elif text_sources == {"dense_caption"}:
+        event_text_source = "dense_caption"
+    else:
+        event_text_source = "instruction_fallback_dense_caption"
+
+    metadata = base_metadata(annotation, config, "dense_video_caption")
+    metadata.update(
+        {
+            "num_events": len(lines),
+            "event_ids": event_ids,
+            "timestamp_format": "seconds",
+            "caption_style": "timestamped_l2_short_events",
+            "event_text_source": event_text_source,
+            "video_source": "source_video",
+        }
+    )
+
+    return make_record(
+        video_path=video_path,
+        prompt=DENSE_VIDEO_CAPTION_PROMPT,
+        answer="\n".join(lines),
+        metadata=metadata,
+    )
+
+
 def build_records_for_annotation(
     annotation: dict[str, Any],
     config: BuildConfig,
@@ -262,6 +380,10 @@ def build_records_for_annotation(
             records.append(record)
     if "dense_caption" in config.tasks:
         records.extend(build_dense_caption_records(annotation, config))
+    if "dense_video_caption" in config.tasks:
+        record = build_dense_video_caption_record(annotation, config)
+        if record is not None:
+            records.append(record)
     return records
 
 
@@ -282,7 +404,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--tasks",
         default="video_description",
-        help="Comma-separated tasks: video_description,dense_caption",
+        help="Comma-separated tasks: video_description,dense_caption,dense_video_caption",
     )
     parser.add_argument("--max-videos", type=int, default=10_000, help="Maximum annotation videos to convert; 0 means unlimited")
     parser.add_argument("--max-records", type=int, default=0, help="Maximum output records; 0 means unlimited")
