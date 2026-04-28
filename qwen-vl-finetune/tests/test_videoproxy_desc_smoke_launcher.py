@@ -64,7 +64,7 @@ class VideoProxyDescSmokeLauncherTest(unittest.TestCase):
 
         self.assertEqual(
             config["annotation_path"],
-            "/m2v_intern/xuboshen/zgw/data/VideoProxyMixed/multi_task/experiments/composition_base_seg_logic_aot_hier10k_el10k_aot10k_mf256_ema/qwen_sft/proxy_mix_train_sft.jsonl",
+            "/m2v_intern/xuboshen/zgw/data/VideoProxyMixed/hier_seg_annotation_v1/qwen_sft_data/videoproxy_proxy_mix_sft.jsonl",
         )
         self.assertEqual(config["data_path"], "")
         self.assertEqual(config["sampling_rate"], 1.0)
