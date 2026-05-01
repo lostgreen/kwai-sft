@@ -296,6 +296,73 @@ def _build_messages(item: Dict[str, Any], base_path: Path) -> List[Dict[str, Any
     return messages
 
 
+def _special_token_id(tokenizer: Any, token: str, fallback: int | None = None) -> int | None:
+    converter = getattr(tokenizer, "convert_tokens_to_ids", None)
+    if converter is None:
+        return fallback
+
+    token_id = converter(token)
+    unk_token_id = getattr(tokenizer, "unk_token_id", None)
+    if token_id is None or token_id == unk_token_id:
+        return fallback
+    return int(token_id)
+
+
+def _encode_plain_text(tokenizer: Any, text: str) -> list[int]:
+    encoder = getattr(tokenizer, "encode", None)
+    if encoder is None:
+        return []
+    return list(encoder(text, add_special_tokens=False))
+
+
+def _starts_with(values: list[int], start: int, pattern: list[int]) -> bool:
+    if not pattern or start + len(pattern) > len(values):
+        return False
+    return values[start : start + len(pattern)] == pattern
+
+
+def _assistant_label_spans(input_ids: list[int], tokenizer: Any) -> list[tuple[int, int]]:
+    """Return assistant response spans from rendered Qwen chat-template tokens.
+
+    The rendered template is expected to contain
+    ``<|im_start|>assistant\n...<|im_end|>\n``.  Matching the full header avoids
+    treating a plain "assistant" token inside user text as a supervised answer.
+    """
+
+    im_start_id = _special_token_id(tokenizer, "<|im_start|>", 151644)
+    im_end_id = _special_token_id(tokenizer, "<|im_end|>", 151645)
+    if im_start_id is None or im_end_id is None:
+        return []
+
+    assistant_header = [im_start_id] + _encode_plain_text(tokenizer, "assistant\n")
+    newline_ids = _encode_plain_text(tokenizer, "\n")
+    if len(assistant_header) <= 1:
+        return []
+
+    spans: list[tuple[int, int]] = []
+    pos = 0
+    L = len(input_ids)
+    while pos < L:
+        if not _starts_with(input_ids, pos, assistant_header):
+            pos += 1
+            continue
+
+        ans_start = pos + len(assistant_header)
+        ans_end = ans_start
+        while ans_end < L and input_ids[ans_end] != im_end_id:
+            ans_end += 1
+        if ans_end >= L:
+            break
+
+        label_end = ans_end + 1
+        if newline_ids and _starts_with(input_ids, label_end, newline_ids):
+            label_end += len(newline_ids)
+        spans.append((ans_start, label_end))
+        pos = label_end
+
+    return spans
+
+
 def preprocess_qwen_visual(
     sources,
     processor,
@@ -323,20 +390,11 @@ def preprocess_qwen_visual(
     labels = torch.full_like(input_ids, IGNORE_INDEX)
 
     input_ids_flat = input_ids[0].tolist()
-    L = len(input_ids_flat)
-    pos = 0
-    while pos < L:
-        if input_ids_flat[pos] == 77091:
-            ans_start = pos + 2
-            ans_end = ans_start
-            while ans_end < L and input_ids_flat[ans_end] != 151645:
-                ans_end += 1
-            if ans_end < L:
-                labels[0, ans_start : ans_end + 2] = input_ids[
-                    0, ans_start : ans_end + 2
-                ]
-                pos = ans_end
-        pos += 1
+    label_spans = _assistant_label_spans(input_ids_flat, processor.tokenizer)
+    if not label_spans:
+        raise ValueError("No assistant response span found in tokenized chat template")
+    for ans_start, ans_end in label_spans:
+        labels[0, ans_start:ans_end] = input_ids[0, ans_start:ans_end]
 
     full_result["labels"] = labels
     full_result["input_ids"] = input_ids

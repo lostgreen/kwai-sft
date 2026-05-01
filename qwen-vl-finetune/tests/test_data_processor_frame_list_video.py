@@ -95,6 +95,47 @@ class DataProcessorFrameListVideoTest(unittest.TestCase):
 
         self.assertEqual(kwargs, {})
 
+    def test_assistant_label_spans_ignore_plain_assistant_token_in_user_prompt(self):
+        data_processor = load_data_processor_module()
+
+        class FakeTokenizer:
+            unk_token_id = -1
+
+            def convert_tokens_to_ids(self, token):
+                return {
+                    "<|im_start|>": 151644,
+                    "<|im_end|>": 151645,
+                }.get(token, self.unk_token_id)
+
+            def encode(self, text, add_special_tokens=False):
+                assert add_special_tokens is False
+                return {
+                    "assistant\n": [77091, 198],
+                    "\n": [198],
+                }[text]
+
+        ids = [
+            151644,
+            872,
+            198,
+            100,
+            77091,
+            200,
+            151645,
+            198,
+            151644,
+            77091,
+            198,
+            300,
+            301,
+            151645,
+            198,
+        ]
+
+        spans = data_processor._assistant_label_spans(ids, FakeTokenizer())
+
+        self.assertEqual(spans, [(11, 15)])
+
 
 if __name__ == "__main__":
     unittest.main()
