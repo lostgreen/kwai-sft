@@ -75,6 +75,8 @@ class VideoProxyDescSmokeLauncherTest(unittest.TestCase):
         self.assertIn("videoproxy_desc_smoke", text)
         self.assertIn("/m2v_intern/xuboshen/models/Qwen3-VL-4B-Instruct", text)
         self.assertIn("--nproc_per_node=${NPROC_PER_NODE}", text)
+        self.assertIn("VIDEO_MAX_TOKENS=\"${VIDEO_MAX_TOKENS:-8192}\"", text)
+        self.assertIn("VIDEO_MAX_PIXELS=\"${VIDEO_MAX_PIXELS:-$((VIDEO_MAX_TOKENS * VIDEO_TOKEN_PIXEL_FACTOR))}\"", text)
         self.assertIn('--video_max_frames "${VIDEO_MAX_FRAMES}"', text)
         self.assertIn('--video_max_pixels "${VIDEO_MAX_PIXELS}"', text)
 
@@ -91,6 +93,8 @@ class VideoProxyDescSmokeLauncherTest(unittest.TestCase):
         self.assertIn("--report_to tensorboard", text)
         self.assertIn("--logging_dir \"${TENSORBOARD_DIR}\"", text)
         self.assertIn("EFFECTIVE_BATCH=$((NPROC_PER_NODE * BATCH_SIZE * GRAD_ACCUM_STEPS))", text)
+        self.assertIn("VIDEO_MAX_TOKENS=\"${VIDEO_MAX_TOKENS:-8192}\"", text)
+        self.assertIn("VIDEO_MAX_PIXELS=\"${VIDEO_MAX_PIXELS:-$((VIDEO_MAX_TOKENS * VIDEO_TOKEN_PIXEL_FACTOR))}\"", text)
 
     def test_dense_video_caption_launcher_uses_registered_dataset_and_longer_context(self):
         text = DVC_SCRIPT_PATH.read_text(encoding="utf-8")
@@ -100,6 +104,8 @@ class VideoProxyDescSmokeLauncherTest(unittest.TestCase):
         self.assertIn("BATCH_SIZE=\"${BATCH_SIZE:-2}\"", text)
         self.assertIn("GRAD_ACCUM_STEPS=\"${GRAD_ACCUM_STEPS:-16}\"", text)
         self.assertIn("--video_max_frames \"${VIDEO_MAX_FRAMES}\"", text)
+        self.assertIn("VIDEO_MAX_TOKENS=\"${VIDEO_MAX_TOKENS:-8192}\"", text)
+        self.assertIn("VIDEO_MAX_PIXELS=\"${VIDEO_MAX_PIXELS:-$((VIDEO_MAX_TOKENS * VIDEO_TOKEN_PIXEL_FACTOR))}\"", text)
         self.assertIn("--report_to tensorboard", text)
 
     def test_proxy_mix_sft_launcher_uses_registered_dataset_and_large_context(self):
@@ -110,6 +116,8 @@ class VideoProxyDescSmokeLauncherTest(unittest.TestCase):
         self.assertIn("BATCH_SIZE=\"${BATCH_SIZE:-1}\"", text)
         self.assertIn("GRAD_ACCUM_STEPS=\"${GRAD_ACCUM_STEPS:-32}\"", text)
         self.assertIn("--video_max_frames \"${VIDEO_MAX_FRAMES}\"", text)
+        self.assertIn("VIDEO_MAX_TOKENS=\"${VIDEO_MAX_TOKENS:-8192}\"", text)
+        self.assertIn("VIDEO_MAX_PIXELS=\"${VIDEO_MAX_PIXELS:-$((VIDEO_MAX_TOKENS * VIDEO_TOKEN_PIXEL_FACTOR))}\"", text)
         self.assertIn("--report_to tensorboard", text)
 
 

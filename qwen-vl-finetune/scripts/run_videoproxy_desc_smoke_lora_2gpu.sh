@@ -13,8 +13,8 @@ MASTER_PORT="${MASTER_PORT:-29511}"
 
 MODEL_PATH="${MODEL_PATH:-/m2v_intern/xuboshen/models/Qwen3-VL-4B-Instruct}"
 DATASET_USE="${DATASET_USE:-videoproxy_desc_smoke}"
-OUTPUT_DIR="${OUTPUT_DIR:-./output/qwen3vl4b_videoproxy_desc_smoke_lora_256f_px65536}"
-RUN_NAME="${RUN_NAME:-qwen3vl4b_videoproxy_desc_smoke_lora_256f_px65536}"
+OUTPUT_DIR="${OUTPUT_DIR:-./output/qwen3vl4b_videoproxy_desc_smoke_lora_256f_tok8192}"
+RUN_NAME="${RUN_NAME:-qwen3vl4b_videoproxy_desc_smoke_lora_256f_tok8192}"
 
 DEEPSPEED_CONFIG="${DEEPSPEED_CONFIG:-scripts/zero2.json}"
 LEARNING_RATE="${LEARNING_RATE:-1e-5}"
@@ -27,8 +27,11 @@ MODEL_MAX_LENGTH="${MODEL_MAX_LENGTH:-8192}"
 VIDEO_FPS="${VIDEO_FPS:-2}"
 VIDEO_MIN_FRAMES="${VIDEO_MIN_FRAMES:-4}"
 VIDEO_MAX_FRAMES="${VIDEO_MAX_FRAMES:-256}"
-VIDEO_MIN_PIXELS="${VIDEO_MIN_PIXELS:-3136}"
-VIDEO_MAX_PIXELS="${VIDEO_MAX_PIXELS:-65536}"
+VIDEO_TOKEN_PIXEL_FACTOR="${VIDEO_TOKEN_PIXEL_FACTOR:-2048}"  # 32 * 32 * 2 for Qwen3-VL video tokens.
+VIDEO_MIN_TOKENS="${VIDEO_MIN_TOKENS:-256}"
+VIDEO_MAX_TOKENS="${VIDEO_MAX_TOKENS:-8192}"
+VIDEO_MIN_PIXELS="${VIDEO_MIN_PIXELS:-$((VIDEO_MIN_TOKENS * VIDEO_TOKEN_PIXEL_FACTOR))}"
+VIDEO_MAX_PIXELS="${VIDEO_MAX_PIXELS:-$((VIDEO_MAX_TOKENS * VIDEO_TOKEN_PIXEL_FACTOR))}"
 
 LORA_R="${LORA_R:-64}"
 LORA_ALPHA="${LORA_ALPHA:-128}"
@@ -40,7 +43,7 @@ echo "[videoproxy-desc-smoke] model: ${MODEL_PATH}"
 echo "[videoproxy-desc-smoke] dataset: ${DATASET_USE}"
 echo "[videoproxy-desc-smoke] output: ${OUTPUT_DIR}"
 echo "[videoproxy-desc-smoke] gpus: CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}, nproc=${NPROC_PER_NODE}"
-echo "[videoproxy-desc-smoke] video: frames=${VIDEO_MAX_FRAMES}, pixels=${VIDEO_MAX_PIXELS}, fps=${VIDEO_FPS}"
+echo "[videoproxy-desc-smoke] video: frames=${VIDEO_MAX_FRAMES}, tokens=${VIDEO_MAX_TOKENS}, pixels=${VIDEO_MAX_PIXELS}, fps=${VIDEO_FPS}"
 
 torchrun --nproc_per_node=${NPROC_PER_NODE} \
   --master_addr="${MASTER_ADDR}" \

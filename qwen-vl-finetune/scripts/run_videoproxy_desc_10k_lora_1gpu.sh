@@ -18,7 +18,7 @@ MODEL_PATH="${MODEL_PATH:-/m2v_intern/xuboshen/models/Qwen3-VL-4B-Instruct}"
 DATASET_USE="${DATASET_USE:-videoproxy_desc_10k}"
 
 SFT_MODEL_ROOT="${SFT_MODEL_ROOT:-/m2v_intern/xuboshen/zgw/SFT-Models/VideoProxyMixed}"
-EXP_NAME="${EXP_NAME:-qwen3vl4b_videoproxy_desc10k_lora_2ep_1gpu_256f_px65536}"
+EXP_NAME="${EXP_NAME:-qwen3vl4b_videoproxy_desc10k_lora_2ep_1gpu_256f_tok8192}"
 OUTPUT_DIR="${OUTPUT_DIR:-${SFT_MODEL_ROOT}/${EXP_NAME}}"
 TENSORBOARD_DIR="${TENSORBOARD_DIR:-${OUTPUT_DIR}/tensorboard}"
 RUN_NAME="${RUN_NAME:-${EXP_NAME}}"
@@ -33,8 +33,11 @@ MODEL_MAX_LENGTH="${MODEL_MAX_LENGTH:-8192}"
 VIDEO_FPS="${VIDEO_FPS:-2}"
 VIDEO_MIN_FRAMES="${VIDEO_MIN_FRAMES:-4}"
 VIDEO_MAX_FRAMES="${VIDEO_MAX_FRAMES:-256}"
-VIDEO_MIN_PIXELS="${VIDEO_MIN_PIXELS:-3136}"
-VIDEO_MAX_PIXELS="${VIDEO_MAX_PIXELS:-65536}"
+VIDEO_TOKEN_PIXEL_FACTOR="${VIDEO_TOKEN_PIXEL_FACTOR:-2048}"  # 32 * 32 * 2 for Qwen3-VL video tokens.
+VIDEO_MIN_TOKENS="${VIDEO_MIN_TOKENS:-256}"
+VIDEO_MAX_TOKENS="${VIDEO_MAX_TOKENS:-8192}"
+VIDEO_MIN_PIXELS="${VIDEO_MIN_PIXELS:-$((VIDEO_MIN_TOKENS * VIDEO_TOKEN_PIXEL_FACTOR))}"
+VIDEO_MAX_PIXELS="${VIDEO_MAX_PIXELS:-$((VIDEO_MAX_TOKENS * VIDEO_TOKEN_PIXEL_FACTOR))}"
 
 LORA_R="${LORA_R:-64}"
 LORA_ALPHA="${LORA_ALPHA:-128}"
@@ -53,7 +56,7 @@ echo "[videoproxy-desc-10k] output: ${OUTPUT_DIR}"
 echo "[videoproxy-desc-10k] tensorboard: ${TENSORBOARD_DIR}"
 echo "[videoproxy-desc-10k] gpus: CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}, nproc=${NPROC_PER_NODE}"
 echo "[videoproxy-desc-10k] batch: micro=${BATCH_SIZE}, grad_accum=${GRAD_ACCUM_STEPS}, effective=${EFFECTIVE_BATCH}"
-echo "[videoproxy-desc-10k] video: frames=${VIDEO_MAX_FRAMES}, pixels=${VIDEO_MAX_PIXELS}, fps=${VIDEO_FPS}"
+echo "[videoproxy-desc-10k] video: frames=${VIDEO_MAX_FRAMES}, tokens=${VIDEO_MAX_TOKENS}, pixels=${VIDEO_MAX_PIXELS}, fps=${VIDEO_FPS}"
 
 torchrun --nproc_per_node=${NPROC_PER_NODE} \
   --master_addr="${MASTER_ADDR}" \
