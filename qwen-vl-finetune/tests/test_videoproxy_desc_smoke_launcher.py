@@ -10,6 +10,8 @@ SCRIPT_PATH = FINETUNE_ROOT / "scripts" / "run_videoproxy_desc_smoke_lora_2gpu.s
 FORMAL_SCRIPT_PATH = FINETUNE_ROOT / "scripts" / "run_videoproxy_desc_10k_lora_1gpu.sh"
 DVC_SCRIPT_PATH = FINETUNE_ROOT / "scripts" / "run_videoproxy_dvc_10k_lora_1gpu.sh"
 PROXY_MIX_SCRIPT_PATH = FINETUNE_ROOT / "scripts" / "run_videoproxy_proxy_mix_sft_lora_1gpu.sh"
+RERUN_4B_SCRIPT_PATH = FINETUNE_ROOT / "scripts" / "run_videoproxy_sft_4b_8gpu.sh"
+RERUN_8B_SCRIPT_PATH = FINETUNE_ROOT / "scripts" / "run_videoproxy_sft_8b_8gpu.sh"
 
 
 def load_data_module():
@@ -119,6 +121,28 @@ class VideoProxyDescSmokeLauncherTest(unittest.TestCase):
         self.assertIn("VIDEO_MAX_TOKENS=\"${VIDEO_MAX_TOKENS:-8192}\"", text)
         self.assertIn("VIDEO_MAX_PIXELS=\"${VIDEO_MAX_PIXELS:-$((VIDEO_MAX_TOKENS * VIDEO_TOKEN_PIXEL_FACTOR))}\"", text)
         self.assertIn("--report_to tensorboard", text)
+
+    def test_4b_8gpu_rerun_launcher_runs_all_three_tasks_for_two_epochs(self):
+        text = RERUN_4B_SCRIPT_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("MODEL_PATH=\"${MODEL_PATH:-/m2v_intern/xuboshen/models/Qwen3-VL-4B-Instruct}\"", text)
+        self.assertIn("NPROC_PER_NODE=\"${NPROC_PER_NODE:-8}\"", text)
+        self.assertIn("NUM_TRAIN_EPOCHS=\"${NUM_TRAIN_EPOCHS:-2}\"", text)
+        self.assertIn("VIDEO_MAX_TOKENS=\"${VIDEO_MAX_TOKENS:-8192}\"", text)
+        self.assertIn("run_task vdc scripts/run_videoproxy_desc_10k_lora_1gpu.sh", text)
+        self.assertIn("run_task dvc scripts/run_videoproxy_dvc_10k_lora_1gpu.sh", text)
+        self.assertIn("run_task proxy scripts/run_videoproxy_proxy_mix_sft_lora_1gpu.sh", text)
+
+    def test_8b_8gpu_rerun_launcher_runs_all_three_tasks_for_two_epochs(self):
+        text = RERUN_8B_SCRIPT_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("MODEL_PATH=\"${MODEL_PATH:-/m2v_intern/xuboshen/models/Qwen3-VL-8B-Instruct}\"", text)
+        self.assertIn("NPROC_PER_NODE=\"${NPROC_PER_NODE:-8}\"", text)
+        self.assertIn("NUM_TRAIN_EPOCHS=\"${NUM_TRAIN_EPOCHS:-2}\"", text)
+        self.assertIn("VIDEO_MAX_TOKENS=\"${VIDEO_MAX_TOKENS:-8192}\"", text)
+        self.assertIn("run_task vdc scripts/run_videoproxy_desc_10k_lora_1gpu.sh", text)
+        self.assertIn("run_task dvc scripts/run_videoproxy_dvc_10k_lora_1gpu.sh", text)
+        self.assertIn("run_task proxy scripts/run_videoproxy_proxy_mix_sft_lora_1gpu.sh", text)
 
 
 if __name__ == "__main__":
